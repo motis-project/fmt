@@ -406,6 +406,8 @@ TEST(PrintfTest, Float) {
   EXPECT_PRINTF(buffer, "%E", 392.65);
   EXPECT_PRINTF("392.65", "%g", 392.65);
   EXPECT_PRINTF("392.65", "%G", 392.65);
+  EXPECT_PRINTF("392", "%g", 392.0);
+  EXPECT_PRINTF("392", "%G", 392.0);
   safe_sprintf(buffer, "%a", -392.65);
   EXPECT_EQ(buffer, format("{:a}", -392.65));
   safe_sprintf(buffer, "%A", -392.65);
@@ -432,11 +434,11 @@ TEST(PrintfTest, Char) {
 
 TEST(PrintfTest, String) {
   EXPECT_PRINTF("abc", "%s", "abc");
-  const char* null_str = FMT_NULL;
+  const char* null_str = nullptr;
   EXPECT_PRINTF("(null)", "%s", null_str);
   EXPECT_PRINTF("    (null)", "%10s", null_str);
   EXPECT_PRINTF(L"abc", L"%s", L"abc");
-  const wchar_t* null_wstr = FMT_NULL;
+  const wchar_t* null_wstr = nullptr;
   EXPECT_PRINTF(L"(null)", L"%s", null_wstr);
   EXPECT_PRINTF(L"    (null)", L"%10s", null_wstr);
 }
@@ -445,22 +447,22 @@ TEST(PrintfTest, Pointer) {
   int n;
   void* p = &n;
   EXPECT_PRINTF(fmt::format("{}", p), "%p", p);
-  p = FMT_NULL;
+  p = nullptr;
   EXPECT_PRINTF("(nil)", "%p", p);
   EXPECT_PRINTF("     (nil)", "%10p", p);
   const char* s = "test";
   EXPECT_PRINTF(fmt::format("{:p}", s), "%p", s);
-  const char* null_str = FMT_NULL;
+  const char* null_str = nullptr;
   EXPECT_PRINTF("(nil)", "%p", null_str);
 
   p = &n;
   EXPECT_PRINTF(fmt::format(L"{}", p), L"%p", p);
-  p = FMT_NULL;
+  p = nullptr;
   EXPECT_PRINTF(L"(nil)", L"%p", p);
   EXPECT_PRINTF(L"     (nil)", L"%10p", p);
   const wchar_t* w = L"test";
   EXPECT_PRINTF(fmt::format(L"{:p}", w), L"%p", w);
-  const wchar_t* null_wstr = FMT_NULL;
+  const wchar_t* null_wstr = nullptr;
   EXPECT_PRINTF(L"(nil)", L"%p", null_wstr);
 }
 
@@ -520,6 +522,10 @@ TEST(PrintfTest, CheckFormatStringRegression) {
   check_format_string_regression("%c%s", 'x', "");
 }
 
+TEST(PrintfTest, FixedLargeExponent) {
+  EXPECT_EQ("1000000000000000000000", fmt::sprintf("%.*f", -13, 1e21));
+}
+
 TEST(PrintfTest, VSPrintfMakeArgsExample) {
   fmt::format_arg_store<fmt::printf_context, int, const char*> as{42,
                                                                   "something"};
@@ -555,22 +561,53 @@ TEST(PrintfTest, VSPrintfMakeWArgsExample) {
 #endif
 }
 
-TEST(PrintfTest, snprintf) {
-  char buffer[4] = "xxx";
-  auto result = fmt::snprintf(buffer, 0, "test");
-  EXPECT_EQ("xxx", fmt::to_string_view(buffer));
-  EXPECT_EQ(4u, result.size);
-  EXPECT_EQ(buffer, result.out);
-  result = fmt::snprintf(buffer, 2, "test");
-  EXPECT_EQ("tex", fmt::to_string_view(buffer));
-  EXPECT_EQ(4u, result.size);
-  EXPECT_EQ(buffer + 2, result.out);
-  result = fmt::snprintf(buffer, 3, "test");
-  EXPECT_EQ("tes", fmt::to_string_view(buffer));
-  EXPECT_EQ(4u, result.size);
-  EXPECT_EQ(buffer + 3, result.out);
-  result = fmt::snprintf(buffer, 4, "test");
-  EXPECT_EQ("test", std::string(buffer, 4));
-  EXPECT_EQ(4u, result.size);
-  EXPECT_EQ(buffer + 4, result.out);
+typedef fmt::printf_arg_formatter<
+    fmt::back_insert_range<fmt::internal::buffer<char>>>
+    formatter_t;
+typedef fmt::basic_printf_context<formatter_t::iterator, char> context_t;
+
+// A custom printf argument formatter that doesn't print `-` for floating-point
+// values rounded to 0.
+class custom_printf_arg_formatter : public formatter_t {
+ public:
+  using formatter_t::iterator;
+
+  custom_printf_arg_formatter(formatter_t::iterator iter,
+                              formatter_t::format_specs& spec, context_t& ctx)
+      : formatter_t(iter, spec, ctx) {}
+
+  using formatter_t::operator();
+
+#if FMT_MSC_VER > 0 && FMT_MSC_VER <= 1804
+  template <typename T, FMT_ENABLE_IF(std::is_floating_point<T>::value)>
+  iterator operator()(T value){
+#else
+  iterator operator()(double value) {
+#endif
+      // Comparing a float to 0.0 is safe.
+      if (round(value * pow(10, spec()->precision)) == 0.0) value = 0;
+  return formatter_t::operator()(value);
+}
+}
+;
+
+typedef fmt::basic_format_args<context_t> format_args_t;
+
+std::string custom_vformat(fmt::string_view format_str, format_args_t args) {
+  fmt::memory_buffer buffer;
+  fmt::vprintf<custom_printf_arg_formatter>(buffer, format_str, args);
+  return std::string(buffer.data(), buffer.size());
+}
+
+template <typename... Args>
+std::string custom_format(const char* format_str, const Args&... args) {
+  auto va = fmt::make_printf_args(args...);
+  return custom_vformat(format_str, va);
+}
+
+TEST(PrintfTest, CustomFormat) {
+  EXPECT_EQ("0.00", custom_format("%.2f", -.00001));
+  EXPECT_EQ("0.00", custom_format("%.2f", .00001));
+  EXPECT_EQ("1.00", custom_format("%.2f", 1.00001));
+  EXPECT_EQ("-1.00", custom_format("%.2f", -1.00001));
 }

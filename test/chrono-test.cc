@@ -60,7 +60,7 @@ TEST(TimeTest, GrowBuffer) {
   std::string s = "{:";
   for (int i = 0; i < 30; ++i) s += "%c";
   s += "}\n";
-  std::time_t t = std::time(FMT_NULL);
+  std::time_t t = std::time(nullptr);
   fmt::format(s, *std::localtime(&t));
 }
 
@@ -83,13 +83,13 @@ static bool EqualTime(const std::tm& lhs, const std::tm& rhs) {
 }
 
 TEST(TimeTest, LocalTime) {
-  std::time_t t = std::time(FMT_NULL);
+  std::time_t t = std::time(nullptr);
   std::tm tm = *std::localtime(&t);
   EXPECT_TRUE(EqualTime(tm, fmt::localtime(t)));
 }
 
 TEST(TimeTest, GMTime) {
-  std::time_t t = std::time(FMT_NULL);
+  std::time_t t = std::time(nullptr);
   std::tm tm = *std::gmtime(&t);
   EXPECT_TRUE(EqualTime(tm, fmt::gmtime(t)));
 }
@@ -294,6 +294,51 @@ TEST(ChronoTest, FormatFullSpecsQq) {
   EXPECT_EQ(" 1.23 ms ", fmt::format("{0:^{2}.{1}%Q %q}", dms(1.234), 2, 9));
   EXPECT_EQ("=1.234 ms=", fmt::format("{:=^{}.{}%Q %q}", dms(1.234), 10, 3));
   EXPECT_EQ("*1.2340 ms*", fmt::format("{:*^11.4%Q %q}", dms(1.234)));
+}
+
+TEST(ChronoTest, InvalidWidthId) {
+  EXPECT_THROW(fmt::format("{:{o}", std::chrono::seconds(0)),
+               fmt::format_error);
+}
+
+TEST(ChronoTest, InvalidColons) {
+  EXPECT_THROW(fmt::format("{0}=:{0::", std::chrono::seconds(0)),
+               fmt::format_error);
+}
+
+TEST(ChronoTest, NegativeDurations) {
+  EXPECT_EQ("-12345", fmt::format("{:%Q}", std::chrono::seconds(-12345)));
+  EXPECT_EQ("-03:25:45",
+            fmt::format("{:%H:%M:%S}", std::chrono::seconds(-12345)));
+  EXPECT_EQ("-00:01",
+            fmt::format("{:%M:%S}", std::chrono::duration<double>(-1)));
+  EXPECT_EQ("s", fmt::format("{:%q}", std::chrono::seconds(-12345)));
+  EXPECT_EQ("-00.127",
+            fmt::format("{:%S}",
+                        std::chrono::duration<signed char, std::milli>{-127}));
+  auto min = std::numeric_limits<int>::min();
+  EXPECT_EQ(fmt::format("{}", min),
+            fmt::format("{:%Q}", std::chrono::duration<int>(min)));
+}
+
+TEST(ChronoTest, SpecialDurations) {
+  EXPECT_EQ(
+      "40.",
+      fmt::format("{:%S}", std::chrono::duration<double>(1e20)).substr(0, 3));
+  auto nan = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_EQ(
+      "nan nan nan nan.nan nan:nan nan",
+      fmt::format("{:%I %H %M %S %R %r}", std::chrono::duration<double>(nan)));
+  fmt::format("{:%S}",
+              std::chrono::duration<float, std::atto>(1.79400457e+31f));
+  EXPECT_EQ(fmt::format("{}", std::chrono::duration<float, std::exa>(1)),
+            "1Es");
+  EXPECT_EQ(fmt::format("{}", std::chrono::duration<float, std::atto>(1)),
+            "1as");
+  EXPECT_EQ(fmt::format("{:%R}", std::chrono::duration<char, std::mega>{2}),
+            "03:33");
+  EXPECT_EQ(fmt::format("{:%T}", std::chrono::duration<char, std::mega>{2}),
+            "03:33:20");
 }
 
 #endif  // FMT_STATIC_THOUSANDS_SEPARATOR

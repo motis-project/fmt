@@ -5,6 +5,10 @@
 //
 // For the license information refer to format.h.
 
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include "fmt/format.h"
 #include "gtest-extra.h"
 
@@ -14,14 +18,15 @@
 // A custom argument formatter that doesn't print `-` for floating-point values
 // rounded to 0.
 class custom_arg_formatter
-    : public fmt::arg_formatter<fmt::back_insert_range<fmt::internal::buffer>> {
+    : public fmt::arg_formatter<
+          fmt::back_insert_range<fmt::internal::buffer<char>>> {
  public:
-  typedef fmt::back_insert_range<fmt::internal::buffer> range;
+  typedef fmt::back_insert_range<fmt::internal::buffer<char>> range;
   typedef fmt::arg_formatter<range> base;
 
   custom_arg_formatter(fmt::format_context& ctx,
                        fmt::format_parse_context* parse_ctx,
-                       fmt::format_specs* s = FMT_NULL)
+                       fmt::format_specs* s = nullptr)
       : base(ctx, parse_ctx, s) {}
 
   using base::operator();

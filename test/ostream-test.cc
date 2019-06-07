@@ -6,6 +6,21 @@
 // For the license information refer to format.h.
 
 #define FMT_STRING_ALIAS 1
+#include "fmt/format.h"
+
+struct test {};
+
+// Test that there is no issues with specializations when fmt/ostream.h is
+// included after fmt/format.h.
+namespace fmt {
+template <> struct formatter<test> : formatter<int> {
+  template <typename FormatContext>
+  typename FormatContext::iterator format(const test&, FormatContext& ctx) {
+    return formatter<int>::format(42, ctx);
+  }
+};
+}  // namespace fmt
+
 #include "fmt/ostream.h"
 
 #include <sstream>
@@ -51,7 +66,7 @@ TEST(OStreamTest, Enum) {
   EXPECT_EQ(L"0", fmt::format(L"{}", A));
 }
 
-typedef fmt::back_insert_range<fmt::internal::buffer> range;
+typedef fmt::back_insert_range<fmt::internal::buffer<char>> range;
 
 struct test_arg_formatter : fmt::arg_formatter<range> {
   fmt::format_parse_context parse_ctx;
@@ -61,7 +76,7 @@ struct test_arg_formatter : fmt::arg_formatter<range> {
 
 TEST(OStreamTest, CustomArg) {
   fmt::memory_buffer buffer;
-  fmt::internal::buffer& base = buffer;
+  fmt::internal::buffer<char>& base = buffer;
   fmt::format_context ctx(std::back_inserter(base), fmt::format_args());
   fmt::format_specs spec;
   test_arg_formatter af(ctx, spec);
@@ -134,7 +149,7 @@ TEST(OStreamTest, WriteToOStreamMaxSize) {
   std::streamsize max_streamsize = std::numeric_limits<std::streamsize>::max();
   if (max_size <= fmt::internal::to_unsigned(max_streamsize)) return;
 
-  struct test_buffer : fmt::internal::buffer {
+  struct test_buffer : fmt::internal::buffer<char> {
     explicit test_buffer(std::size_t size) { resize(size); }
     void grow(std::size_t) {}
   } buffer(max_size);
@@ -152,7 +167,7 @@ TEST(OStreamTest, WriteToOStreamMaxSize) {
   } os(streambuf);
 
   testing::InSequence sequence;
-  const char* data = FMT_NULL;
+  const char* data = nullptr;
   typedef std::make_unsigned<std::streamsize>::type ustreamsize;
   ustreamsize size = max_size;
   do {
@@ -173,6 +188,7 @@ TEST(OStreamTest, Join) {
 #if FMT_USE_CONSTEXPR
 TEST(OStreamTest, ConstexprString) {
   EXPECT_EQ("42", format(fmt("{}"), std::string("42")));
+  EXPECT_EQ("a string", format(fmt("{0}"), TestString("a string")));
 }
 #endif
 

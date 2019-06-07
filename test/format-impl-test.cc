@@ -22,12 +22,6 @@
 
 #undef max
 
-#if FMT_HAS_CPP_ATTRIBUTE(noreturn)
-#  define FMT_NORETURN [[noreturn]]
-#else
-#  define FMT_NORETURN
-#endif
-
 using fmt::internal::fp;
 
 template <bool is_iec559> void test_construct_from_double() {
@@ -94,7 +88,7 @@ TEST(FPTest, GetCachedPower) {
     EXPECT_LE(exp, fp.e);
     int dec_exp_step = 8;
     EXPECT_LE(fp.e, exp + dec_exp_step * log2(10));
-    EXPECT_DOUBLE_EQ(pow(10, dec_exp), ldexp(fp.f, fp.e));
+    EXPECT_DOUBLE_EQ(pow(10, dec_exp), ldexp(static_cast<double>(fp.f), fp.e));
   }
 }
 
@@ -143,10 +137,10 @@ TEST(FPTest, FixedHandler) {
             digits::error);
 }
 
-TEST(FPTest, Grisu2FormatCompilesWithNonIEEEDouble) {
+TEST(FPTest, GrisuFormatCompilesWithNonIEEEDouble) {
   fmt::memory_buffer buf;
   int exp = 0;
-  grisu2_format(4.2f, buf, -1, false, exp);
+  grisu_format(4.2f, buf, -1, false, exp);
 }
 
 template <typename T> struct ValueExtractor : fmt::internal::function<T> {
@@ -175,9 +169,9 @@ TEST(FormatTest, FormatNegativeNaN) {
 }
 
 TEST(FormatTest, StrError) {
-  char* message = FMT_NULL;
+  char* message = nullptr;
   char buffer[BUFFER_SIZE];
-  EXPECT_ASSERT(fmt::safe_strerror(EDOM, message = FMT_NULL, 0),
+  EXPECT_ASSERT(fmt::safe_strerror(EDOM, message = nullptr, 0),
                 "invalid buffer");
   EXPECT_ASSERT(fmt::safe_strerror(EDOM, message = buffer, 0),
                 "invalid buffer");
@@ -242,4 +236,29 @@ TEST(FormatTest, FormatErrorCode) {
 
 TEST(FormatTest, CountCodePoints) {
   EXPECT_EQ(4, fmt::internal::count_code_points(fmt::u8string_view("ёжик")));
+}
+
+// Tests fmt::internal::count_digits for integer type Int.
+template <typename Int> void test_count_digits() {
+  for (Int i = 0; i < 10; ++i) EXPECT_EQ(1u, fmt::internal::count_digits(i));
+  for (Int i = 1, n = 1, end = std::numeric_limits<Int>::max() / 10; n <= end;
+       ++i) {
+    n *= 10;
+    EXPECT_EQ(i, fmt::internal::count_digits(n - 1));
+    EXPECT_EQ(i + 1, fmt::internal::count_digits(n));
+  }
+}
+
+TEST(UtilTest, CountDigits) {
+  test_count_digits<uint32_t>();
+  test_count_digits<uint64_t>();
+}
+
+TEST(UtilTest, WriteUIntPtr) {
+  fmt::memory_buffer buf;
+  fmt::writer writer(buf);
+  writer.write_pointer(fmt::internal::bit_cast<fmt::internal::uintptr_t>(
+                           reinterpret_cast<void*>(0xface)),
+                       nullptr);
+  EXPECT_EQ("0xface", to_string(buf));
 }

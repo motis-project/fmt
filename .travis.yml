@@ -7,7 +7,6 @@ os: linux
 git:
   depth: 1
 
-
 env:
   global:
     - secure: |-
@@ -39,6 +38,26 @@ matrix:
             - ubuntu-toolchain-r-test
           packages:
             - g++-6
+     # g++ 8 on Linux with C++17
+    - env: COMPILER=g++-8 BUILD=Debug STANDARD=17
+      compiler: gcc
+      addons:
+        apt:
+          update: true
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-8
+    - env: COMPILER=g++-8 BUILD=Release STANDARD=17
+      compiler: gcc
+      addons:
+        apt:
+          update: true
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-8
+
       # Apple clang on OS X with C++14
     - env: BUILD=Debug STANDARD=14
       compiler: clang
@@ -73,16 +92,6 @@ matrix:
       # g++ 4.8 on Linux with C++11
     - env: COMPILER=g++-4.8 BUILD=Debug STANDARD=11
       compiler: gcc
-      # g++ 4.4 on Linux with C++11
-    - env: COMPILER=g++-4.4 BUILD=Debug STANDARD=11
-      compiler: gcc
-      addons:
-        apt:
-          update: true
-          packages:
-            - g++-4.4
-          sources:
-            - ubuntu-toolchain-r-test
     - name: Android NDK (Gradle)
       language: android
       addons:

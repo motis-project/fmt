@@ -17,13 +17,20 @@ else ()
   target_compile_definitions(gmock PUBLIC GTEST_HAS_PTHREAD=0)
 endif ()
 
-if (NOT SUPPORTS_VARIADIC_TEMPLATES OR NOT SUPPORTS_INITIALIZER_LIST)
+if (NOT SUPPORTS_VARIADIC_TEMPLATES)
   target_compile_definitions(gmock PUBLIC GTEST_LANG_CXX11=0)
 endif ()
 
-# Workaround a bug in implementation of variadic templates in MSVC11.
 if (MSVC)
+  # Workaround a bug in implementation of variadic templates in MSVC11.
   target_compile_definitions(gmock PUBLIC _VARIADIC_MAX=10)
+  
+  # Disable MSVC warnings of _CRT_INSECURE_DEPRECATE functions.
+  target_compile_definitions(gmock PRIVATE _CRT_SECURE_NO_WARNINGS)
+  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    # Disable MSVC warnings of POSIX functions.
+    target_compile_options(gmock PUBLIC -Wno-deprecated-declarations)
+  endif ()
 endif ()
 
 # GTest doesn't detect <tuple> with clang.
@@ -33,7 +40,7 @@ endif ()
 
 # Silence MSVC tr1 deprecation warning in gmock.
 target_compile_definitions(gmock
-  PUBLIC _SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING=0)
+  PUBLIC _SILENCE_TR1_NAMESPACE_DEPRECATION_WARNING=1)
 
 #------------------------------------------------------------------------------
 # Build the actual library tests
@@ -74,9 +81,6 @@ function(add_fmt_test name)
   target_link_libraries(${name} test-main)
 
   # Define if certain C++ features can be used.
-  target_compile_definitions(${name} PRIVATE
-    FMT_USE_TYPE_TRAITS=$<BOOL:${SUPPORTS_TYPE_TRAITS}>
-    FMT_USE_ENUM_BASE=$<BOOL:${SUPPORTS_ENUM_BASE}>)
   if (FMT_PEDANTIC)
     target_compile_options(${name} PRIVATE ${PEDANTIC_COMPILE_FLAGS})
   endif ()
@@ -101,6 +105,7 @@ add_fmt_test(prepare-test)
 add_fmt_test(printf-test)
 add_fmt_test(custom-formatter-test)
 add_fmt_test(ranges-test)
+add_fmt_test(scan-test)
 
 if (HAVE_OPEN)
   add_fmt_executable(posix-mock-test
@@ -132,6 +137,12 @@ endif ()
 message(STATUS "FMT_PEDANTIC: ${FMT_PEDANTIC}")
 
 if (FMT_PEDANTIC)
+  # MSVC fails to compile GMock when C++17 is enabled.
+  if (FMT_HAS_VARIANT AND NOT MSVC)
+    add_fmt_test(std-format-test)
+    set_property(TARGET std-format-test PROPERTY CXX_STANDARD 17)
+  endif ()
+
   # Test that the library can be compiled with exceptions disabled.
   # -fno-exception is broken in icc: https://github.com/fmtlib/fmt/issues/822.
   if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Intel")
