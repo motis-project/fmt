@@ -65,7 +65,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
   "${CMAKE_CURRENT_SOURCE_DIR}/support/cmake")
 
-include(cxx14)
 include(CheckCXXCompilerFlag)
 
 set(FMT_REQUIRED_FEATURES cxx_auto_type cxx_variadic_templates)
