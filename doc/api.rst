@@ -23,7 +23,8 @@ Core API
 ========
 
 ``fmt/core.h`` defines the core API which provides argument handling facilities
-and a lightweight subset of formatting functions.
+and a lightweight subset of formatting functions. In the header-only mode
+include ``fmt/format.h`` instead of ``fmt/core.h``.
 
 The following functions use :ref:`format string syntax <syntax>`
 similar to that of Python's `str.format
@@ -39,15 +40,15 @@ participate in an overload resolution if the latter is not a string.
 
 .. _format:
 
-.. doxygenfunction:: format(const S&, const Args&...)
+.. doxygenfunction:: format(const S&, Args&&...)
 .. doxygenfunction:: vformat(const S&, basic_format_args<buffer_context<Char>>)
 
 .. _print:
 
-.. doxygenfunction:: print(const S&, const Args&...)
+.. doxygenfunction:: print(const S&, Args&&...)
 .. doxygenfunction:: vprint(string_view, format_args)
 
-.. doxygenfunction:: print(std::FILE *, const S&, const Args&...)
+.. doxygenfunction:: print(std::FILE *, const S&, Args&&...)
 .. doxygenfunction:: vprint(std::FILE *, string_view, format_args)
 .. doxygenfunction:: vprint(std::FILE *, wstring_view, wformat_args)
 
@@ -183,8 +184,8 @@ You can also write a formatter for a hierarchy of classes::
 Output Iterator Support
 -----------------------
 
-.. doxygenfunction:: fmt::format_to(OutputIt, const S&, const Args&...)
-.. doxygenfunction:: fmt::format_to_n(OutputIt, std::size_t, string_view, const Args&...)
+.. doxygenfunction:: fmt::format_to(OutputIt, const S&, Args&&...)
+.. doxygenfunction:: fmt::format_to_n(OutputIt, std::size_t, string_view, Args&&...)
 .. doxygenstruct:: fmt::format_to_n_result
    :members:
 
@@ -278,21 +279,21 @@ Custom Formatting of Built-in Types
 It is possible to change the way arguments are formatted by providing a
 custom argument formatter class::
 
-  using arg_formatter =
-    fmt::arg_formatter<fmt::back_insert_range<fmt::internal::buffer>>;
+  using arg_formatter = fmt::arg_formatter<fmt::buffer_range<char>>;
 
   // A custom argument formatter that formats negative integers as unsigned
   // with the ``x`` format specifier.
   class custom_arg_formatter : public arg_formatter {
    public:
-    custom_arg_formatter(fmt::format_context &ctx,
-                         fmt::format_specs *spec = nullptr)
-      : arg_formatter(ctx, spec) {}
+    custom_arg_formatter(fmt::format_context& ctx,
+                         fmt::format_parse_context* parse_ctx = nullptr,
+                         fmt::format_specs* spec = nullptr)
+      : arg_formatter(ctx, parse_ctx, spec) {}
 
     using arg_formatter::operator();
 
     auto operator()(int value) {
-      if (spec().type() == 'x')
+      if (specs() && specs()->type == 'x')
         return (*this)(static_cast<unsigned>(value)); // convert to unsigned and format
       return arg_formatter::operator()(value);
     }
@@ -357,7 +358,7 @@ user-defined types that have overloaded ``operator<<``::
   std::string s = fmt::format("The date is {}", date(2012, 12, 9));
   // s == "The date is 2012-12-9"
 
-.. doxygenfunction:: print(std::basic_ostream<Char>&, const S&, const Args&...)
+.. doxygenfunction:: print(std::basic_ostream<Char>&, const S&, Args&&...)
 
 .. _printf-api:
 

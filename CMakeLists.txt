@@ -41,6 +41,7 @@ option(FMT_WERROR "Halt the compilation with an error on compiler warnings."
 option(FMT_DOC "Generate the doc target." ${MASTER_PROJECT})
 option(FMT_INSTALL "Generate the install target." ${MASTER_PROJECT})
 option(FMT_TEST "Generate the test target." ${MASTER_PROJECT})
+option(FMT_FUZZ "Generate the fuzz target." OFF)
 
 project(FMT CXX)
 
@@ -127,11 +128,18 @@ if (MASTER_PROJECT AND CMAKE_GENERATOR MATCHES "Visual Studio")
     ${CMAKE_MAKE_PROGRAM} -p:FrameworkPathOverride=\"${netfxpath}\" %*")
 endif ()
 
+set(strtod_l_headers stdlib.h)
+if (APPLE)
+  set(strtod_l_headers ${strtod_l_headers} xlocale.h)
+endif ()
+
 include(CheckSymbolExists)
 if (WIN32)
   check_symbol_exists(open io.h HAVE_OPEN)
+  check_symbol_exists(_strtod_l "${strtod_l_headers}" HAVE_STRTOD_L)
 else ()
   check_symbol_exists(open fcntl.h HAVE_OPEN)
+  check_symbol_exists(strtod_l "${strtod_l_headers}" HAVE_STRTOD_L)
 endif ()
 
 function(add_headers VAR)
@@ -143,8 +151,9 @@ function(add_headers VAR)
 endfunction()
 
 # Define the fmt library, its includes and the needed defines.
-add_headers(FMT_HEADERS chrono.h color.h core.h format.h format-inl.h locale.h
-                        ostream.h prepare.h printf.h time.h ranges.h)
+add_headers(FMT_HEADERS chrono.h color.h compile.h core.h format.h format-inl.h
+                        locale.h ostream.h printf.h ranges.h
+                        safe-duration-cast.h)
 set(FMT_SOURCES src/format.cc)
 if (HAVE_OPEN)
   add_headers(FMT_HEADERS posix.h)
@@ -153,6 +162,10 @@ endif ()
 
 add_library(fmt ${FMT_SOURCES} ${FMT_HEADERS} README.rst ChangeLog.rst)
 add_library(fmt::fmt ALIAS fmt)
+
+if (HAVE_STRTOD_L)
+  target_compile_definitions(fmt PUBLIC FMT_LOCALE)
+endif ()
 
 if (FMT_WERROR)
   target_compile_options(fmt PRIVATE ${WERROR_FLAG})
@@ -170,13 +183,16 @@ set_target_properties(fmt PROPERTIES
   DEBUG_POSTFIX d)
 
 if (BUILD_SHARED_LIBS)
-  if (UNIX AND NOT APPLE)
+  if (UNIX AND NOT APPLE AND NOT ${CMAKE_SYSTEM_NAME} MATCHES "SunOS")
     # Fix rpmlint warning:
     # unused-direct-shlib-dependency /usr/lib/libformat.so.1.1.0 /lib/libm.so.6.
     target_link_libraries(fmt -Wl,--as-needed)
   endif ()
   target_compile_definitions(fmt PRIVATE FMT_EXPORT INTERFACE FMT_SHARED)
 endif ()
+if (FMT_SAFE_DURATION_CAST)
+  target_compile_definitions(fmt PUBLIC FMT_SAFE_DURATION_CAST)
+endif()
 
 add_library(fmt-header-only INTERFACE)
 add_library(fmt::fmt-header-only ALIAS fmt-header-only)
@@ -254,6 +270,11 @@ endif ()
 if (FMT_TEST)
   enable_testing()
   add_subdirectory(test)
+endif ()
+
+# Control fuzzing independent of the unit tests.
+if (FMT_FUZZ)
+  add_subdirectory(test/fuzzing)
 endif ()
 
 set(gitignore ${PROJECT_SOURCE_DIR}/.gitignore)

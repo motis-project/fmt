@@ -46,27 +46,25 @@ struct type_with_comma_op {};
 template <typename T> void operator,(type_with_comma_op, const T&);
 template <typename T> type_with_comma_op operator<<(T&, const Date&);
 
-enum TestEnum {};
-static std::ostream& operator<<(std::ostream& os, TestEnum) {
-  return os << "TestEnum";
+enum streamable_enum {};
+static std::ostream& operator<<(std::ostream& os, streamable_enum) {
+  return os << "streamable_enum";
 }
 
-static std::wostream& operator<<(std::wostream& os, TestEnum) {
-  return os << L"TestEnum";
+static std::wostream& operator<<(std::wostream& os, streamable_enum) {
+  return os << L"streamable_enum";
 }
 
-enum TestEnum2 { A };
+enum unstreamable_enum {};
 
 TEST(OStreamTest, Enum) {
-  EXPECT_FALSE((fmt::convert_to_int<TestEnum, char>::value));
-  EXPECT_EQ("TestEnum", fmt::format("{}", TestEnum()));
-  EXPECT_EQ("0", fmt::format("{}", A));
-  EXPECT_FALSE((fmt::convert_to_int<TestEnum, wchar_t>::value));
-  EXPECT_EQ(L"TestEnum", fmt::format(L"{}", TestEnum()));
-  EXPECT_EQ(L"0", fmt::format(L"{}", A));
+  EXPECT_EQ("streamable_enum", fmt::format("{}", streamable_enum()));
+  EXPECT_EQ("0", fmt::format("{}", unstreamable_enum()));
+  EXPECT_EQ(L"streamable_enum", fmt::format(L"{}", streamable_enum()));
+  EXPECT_EQ(L"0", fmt::format(L"{}", unstreamable_enum()));
 }
 
-typedef fmt::back_insert_range<fmt::internal::buffer<char>> range;
+using range = fmt::buffer_range<char>;
 
 struct test_arg_formatter : fmt::arg_formatter<range> {
   fmt::format_parse_context parse_ctx;
@@ -81,8 +79,8 @@ TEST(OStreamTest, CustomArg) {
   fmt::format_specs spec;
   test_arg_formatter af(ctx, spec);
   fmt::visit_format_arg(
-      af, fmt::internal::make_arg<fmt::format_context>(TestEnum()));
-  EXPECT_EQ("TestEnum", std::string(buffer.data(), buffer.size()));
+      af, fmt::internal::make_arg<fmt::format_context>(streamable_enum()));
+  EXPECT_EQ("streamable_enum", std::string(buffer.data(), buffer.size()));
 }
 
 TEST(OStreamTest, Format) {
@@ -97,8 +95,10 @@ TEST(OStreamTest, Format) {
 TEST(OStreamTest, FormatSpecs) {
   EXPECT_EQ("def  ", format("{0:<5}", TestString("def")));
   EXPECT_EQ("  def", format("{0:>5}", TestString("def")));
+#if FMT_NUMERIC_ALIGN
   EXPECT_THROW_MSG(format("{0:=5}", TestString("def")), format_error,
                    "format specifier requires numeric argument");
+#endif
   EXPECT_EQ(" def ", format("{0:^5}", TestString("def")));
   EXPECT_EQ("def**", format("{0:*<5}", TestString("def")));
   EXPECT_THROW_MSG(format("{0:+}", TestString()), format_error,
@@ -145,8 +145,8 @@ TEST(OStreamTest, WriteToOStream) {
 }
 
 TEST(OStreamTest, WriteToOStreamMaxSize) {
-  std::size_t max_size = std::numeric_limits<std::size_t>::max();
-  std::streamsize max_streamsize = std::numeric_limits<std::streamsize>::max();
+  std::size_t max_size = fmt::internal::max_value<std::size_t>();
+  std::streamsize max_streamsize = fmt::internal::max_value<std::streamsize>();
   if (max_size <= fmt::internal::to_unsigned(max_streamsize)) return;
 
   struct test_buffer : fmt::internal::buffer<char> {

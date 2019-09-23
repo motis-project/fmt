@@ -11,6 +11,10 @@
    :alt: Ask questions at StackOverflow with the tag fmt
    :target: http://stackoverflow.com/questions/tagged/fmt
 
+.. image:: https://oss-fuzz-build-logs.storage.googleapis.com/badges/libfmt.svg
+   :alt: fmt is continuously fuzzed att oss-fuzz
+   :target: https://bugs.chromium.org/p/oss-fuzz/issues/list?colspec=ID%20Type%20Component%20Status%20Proj%20Reported%20Owner%20Summary&q=proj%3Dfmt&can=1
+
 **{fmt}** is an open-source formatting library for C++.
 It can be used as a safe and fast alternative to (s)printf and iostreams.
 
@@ -29,8 +33,7 @@ Features
 * Safe `printf implementation
   <https://fmt.dev/latest/api.html#printf-formatting>`_ including
   the POSIX extension for positional arguments.
-* Implementation of the ISO C++ standards proposal `P0645
-  Text Formatting <https://fmt.dev/Text%20Formatting.html>`__.
+* Implementation of `C++20 std::format <https://fmt.dev/Text%20Formatting.html>`__.
 * Support for user-defined types.
 * High performance: faster than common standard library implementations of
   `printf <http://en.cppreference.com/w/cpp/io/c/fprintf>`_ and
@@ -45,7 +48,7 @@ Features
   reported at compile time, automatic memory management prevents buffer overflow
   errors.
 * Ease of use: small self-contained code base, no external dependencies,
-  permissive BSD `license
+  permissive MIT `license
   <https://github.com/fmtlib/fmt/blob/master/LICENSE.rst>`_
 * `Portability <https://fmt.dev/latest/index.html#portability>`_ with
   consistent output across platforms and support for older compilers.
@@ -279,6 +282,8 @@ Projects using this library
 
 * `Ceph <https://ceph.com/>`_: A scalable distributed storage system
 
+* `ccache <https://ccache.dev/>`_: A compiler cache
+
 * `CUAUV <http://cuauv.org/>`_: Cornell University's autonomous underwater
   vehicle
 
@@ -344,7 +349,7 @@ Projects using this library
 * `TrinityCore <https://github.com/TrinityCore/TrinityCore>`_: Open-source
   MMORPG framework
 
-`More... <https://github.com/search?q=cppformat&type=Code>`_
+`More... <https://github.com/search?q=fmtlib&type=Code>`_
 
 If you are aware of other projects using this library, please let me know
 by `email <mailto:victor.zverovich@gmail.com>`_ or by submitting an
@@ -470,7 +475,7 @@ A: use ``std::tuple``:
 License
 -------
 
-{fmt} is distributed under the BSD `license
+{fmt} is distributed under the MIT `license
 <https://github.com/fmtlib/fmt/blob/master/LICENSE.rst>`_.
 
 The `Format String Syntax

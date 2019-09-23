@@ -124,7 +124,7 @@ template <std::size_t N>
 using make_index_sequence = std::make_index_sequence<N>;
 #else
 template <typename T, T... N> struct integer_sequence {
-  typedef T value_type;
+  using value_type = T;
 
   static FMT_CONSTEXPR std::size_t size() { return sizeof...(N); }
 };
@@ -242,13 +242,16 @@ struct formatter<TupleT, Char, enable_if_t<fmt::is_tuple_like<TupleT>::value>> {
   }
 };
 
-template <typename T> struct is_range {
+template <typename T, typename Char> struct is_range {
   static FMT_CONSTEXPR_DECL const bool value =
-      internal::is_range_<T>::value && !internal::is_like_std_string<T>::value;
+      internal::is_range_<T>::value &&
+      !internal::is_like_std_string<T>::value &&
+      !std::is_convertible<T, std::basic_string<Char>>::value;
 };
 
 template <typename RangeT, typename Char>
-struct formatter<RangeT, Char, enable_if_t<fmt::is_range<RangeT>::value>> {
+struct formatter<RangeT, Char,
+                 enable_if_t<fmt::is_range<RangeT, Char>::value>> {
   formatting_range<Char> formatting;
 
   template <typename ParseContext>

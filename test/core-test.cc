@@ -229,8 +229,8 @@ struct custom_context {
 
 TEST(ArgTest, MakeValueWithCustomContext) {
   test_struct t;
-  fmt::internal::value<custom_context> arg =
-      fmt::internal::make_value<custom_context>(t);
+  fmt::internal::value<custom_context> arg(
+      fmt::internal::arg_mapper<custom_context>().map(t));
   custom_context ctx = {false, fmt::format_parse_context("")};
   arg.custom.format(&t, ctx.parse_context(), ctx);
   EXPECT_TRUE(ctx.called);
@@ -432,14 +432,48 @@ TEST(StringViewTest, Compare) {
   check_op<std::greater_equal>();
 }
 
-enum basic_enum {};
-enum enum_with_underlying_type : char {};
+struct enabled_formatter {};
+struct disabled_formatter {};
+struct disabled_formatter_convertible {
+  operator int() const { return 42; }
+};
 
-TEST(CoreTest, ConvertToInt) {
-  EXPECT_FALSE((fmt::convert_to_int<char, char>::value));
-  EXPECT_FALSE((fmt::convert_to_int<const char*, char>::value));
-  EXPECT_TRUE((fmt::convert_to_int<basic_enum, char>::value));
-  EXPECT_TRUE((fmt::convert_to_int<enum_with_underlying_type, char>::value));
+FMT_BEGIN_NAMESPACE
+template <> struct formatter<enabled_formatter> {
+  auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
+    return ctx.begin();
+  }
+  auto format(enabled_formatter, format_context& ctx) -> decltype(ctx.out()) {
+    return ctx.out();
+  }
+};
+FMT_END_NAMESPACE
+
+TEST(CoreTest, HasFormatter) {
+  using fmt::internal::has_formatter;
+  using context = fmt::format_context;
+  EXPECT_TRUE((has_formatter<enabled_formatter, context>::value));
+  EXPECT_FALSE((has_formatter<disabled_formatter, context>::value));
+  EXPECT_FALSE((has_formatter<disabled_formatter_convertible, context>::value));
+}
+
+struct convertible_to_int {
+  operator int() const { return 42; }
+};
+
+FMT_BEGIN_NAMESPACE
+template <> struct formatter<convertible_to_int> {
+  auto parse(format_parse_context& ctx) -> decltype(ctx.begin()) {
+    return ctx.begin();
+  }
+  auto format(convertible_to_int, format_context& ctx) -> decltype(ctx.out()) {
+    return std::copy_n("foo", 3, ctx.out());
+  }
+};
+FMT_END_NAMESPACE
+
+TEST(CoreTest, FormatterOverridesImplicitConversion) {
+  EXPECT_EQ(fmt::format("{}", convertible_to_int()), "foo");
 }
 
 namespace my_ns {
@@ -533,15 +567,18 @@ TEST(CoreTest, ToStringViewForeignStrings) {
   EXPECT_EQ(to_string_view(my_string<wchar_t>(L"42")), L"42");
   EXPECT_EQ(to_string_view(QString(L"42")), L"42");
   fmt::internal::type type =
-      fmt::internal::get_type<fmt::format_context, my_string<char>>::value;
+      fmt::internal::mapped_type_constant<my_string<char>,
+                                          fmt::format_context>::value;
+  EXPECT_EQ(type, fmt::internal::string_type);
+  type = fmt::internal::mapped_type_constant<my_string<wchar_t>,
+                                             fmt::wformat_context>::value;
   EXPECT_EQ(type, fmt::internal::string_type);
   type =
-      fmt::internal::get_type<fmt::wformat_context, my_string<wchar_t>>::value;
-  EXPECT_EQ(type, fmt::internal::string_type);
-  type = fmt::internal::get_type<fmt::wformat_context, QString>::value;
+      fmt::internal::mapped_type_constant<QString, fmt::wformat_context>::value;
   EXPECT_EQ(type, fmt::internal::string_type);
   // Does not compile: only wide format contexts are compatible with QString!
-  // type = fmt::internal::get_type<fmt::format_context, QString>::value;
+  // type = fmt::internal::mapped_type_constant<QString,
+  // fmt::format_context>::value;
 }
 
 TEST(CoreTest, FormatForeignStrings) {
@@ -553,6 +590,10 @@ TEST(CoreTest, FormatForeignStrings) {
   EXPECT_EQ(fmt::format(QString(L"{}"), my_string<wchar_t>(L"42")), L"42");
   EXPECT_EQ(fmt::format(my_string<wchar_t>(L"{}"), QString(L"42")), L"42");
 }
+
+struct implicitly_convertible_to_string {
+  operator std::string() const { return "foo"; }
+};
 
 struct implicitly_convertible_to_string_view {
   operator fmt::string_view() const { return "foo"; }

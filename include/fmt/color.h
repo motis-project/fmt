@@ -12,54 +12,6 @@
 
 FMT_BEGIN_NAMESPACE
 
-#ifdef FMT_DEPRECATED_COLORS
-
-// color and (v)print_colored are deprecated.
-enum FMT_DEPRECATED color {
-  black,
-  red,
-  green,
-  yellow,
-  blue,
-  magenta,
-  cyan,
-  white
-};
-FMT_DEPRECATED FMT_API void vprint_colored(color c, string_view format,
-                                           format_args args);
-FMT_DEPRECATED FMT_API void vprint_colored(color c, wstring_view format,
-                                           wformat_args args);
-template <typename... Args>
-FMT_DEPRECATED inline void print_colored(color c, string_view format_str,
-                                         const Args&... args) {
-  vprint_colored(c, format_str, make_format_args(args...));
-}
-template <typename... Args>
-FMT_DEPRECATED inline void print_colored(color c, wstring_view format_str,
-                                         const Args&... args) {
-  vprint_colored(c, format_str, make_format_args<wformat_context>(args...));
-}
-
-FMT_DEPRECATED inline void vprint_colored(color c, string_view format,
-                                          format_args args) {
-  char escape[] = "\x1b[30m";
-  escape[3] = static_cast<char>('0' + c);
-  std::fputs(escape, stdout);
-  vprint(format, args);
-  std::fputs(internal::data::RESET_COLOR, stdout);
-}
-
-FMT_DEPRECATED inline void vprint_colored(color c, wstring_view format,
-                                          wformat_args args) {
-  wchar_t escape[] = L"\x1b[30m";
-  escape[3] = static_cast<wchar_t>('0' + c);
-  std::fputws(escape, stdout);
-  vprint(format, args);
-  std::fputws(internal::data::WRESET_COLOR, stdout);
-}
-
-#else
-
 enum class color : uint32_t {
   alice_blue = 0xF0F8FF,               // rgb(240,248,255)
   antique_white = 0xFAEBD7,            // rgb(250,235,215)
@@ -221,18 +173,17 @@ enum class terminal_color : uint8_t {
   bright_magenta,
   bright_cyan,
   bright_white
-};  // enum class terminal_color
+};
 
 enum class emphasis : uint8_t {
   bold = 1,
   italic = 1 << 1,
   underline = 1 << 2,
   strikethrough = 1 << 3
-};  // enum class emphasis
+};
 
 // rgb is a struct for red, green and blue colors.
-// We use rgb as name because some editors will show it as color direct in the
-// editor.
+// Using the name "rgb" makes some editors show the color in a tooltip.
 struct rgb {
   FMT_CONSTEXPR rgb() : r(0), g(0), b(0) {}
   FMT_CONSTEXPR rgb(uint8_t r_, uint8_t g_, uint8_t b_) : r(r_), g(g_), b(b_) {}
@@ -286,7 +237,7 @@ class text_style {
       foreground_color = rhs.foreground_color;
     } else if (rhs.set_foreground_color) {
       if (!foreground_color.is_rgb || !rhs.foreground_color.is_rgb)
-        throw format_error("can't OR a terminal color");
+        FMT_THROW(format_error("can't OR a terminal color"));
       foreground_color.value.rgb_color |= rhs.foreground_color.value.rgb_color;
     }
 
@@ -295,7 +246,7 @@ class text_style {
       background_color = rhs.background_color;
     } else if (rhs.set_background_color) {
       if (!background_color.is_rgb || !rhs.background_color.is_rgb)
-        throw format_error("can't OR a terminal color");
+        FMT_THROW(format_error("can't OR a terminal color"));
       background_color.value.rgb_color |= rhs.background_color.value.rgb_color;
     }
 
@@ -315,7 +266,7 @@ class text_style {
       foreground_color = rhs.foreground_color;
     } else if (rhs.set_foreground_color) {
       if (!foreground_color.is_rgb || !rhs.foreground_color.is_rgb)
-        throw format_error("can't AND a terminal color");
+        FMT_THROW(format_error("can't AND a terminal color"));
       foreground_color.value.rgb_color &= rhs.foreground_color.value.rgb_color;
     }
 
@@ -324,7 +275,7 @@ class text_style {
       background_color = rhs.background_color;
     } else if (rhs.set_background_color) {
       if (!background_color.is_rgb || !rhs.background_color.is_rgb)
-        throw format_error("can't AND a terminal color");
+        FMT_THROW(format_error("can't AND a terminal color"));
       background_color.value.rgb_color &= rhs.background_color.value.rgb_color;
     }
 
@@ -407,7 +358,7 @@ template <typename Char> struct ansi_color_escape {
     // If we have a terminal color, we need to output another escape code
     // sequence.
     if (!text_color.is_rgb) {
-      bool is_background = esc == internal::data::BACKGROUND_COLOR;
+      bool is_background = esc == internal::data::background_color;
       uint32_t value = text_color.value.term_color;
       // Background ASCII codes are the same as the foreground ones but with
       // 10 more.
@@ -479,13 +430,13 @@ template <typename Char> struct ansi_color_escape {
 template <typename Char>
 FMT_CONSTEXPR ansi_color_escape<Char> make_foreground_color(
     internal::color_type foreground) FMT_NOEXCEPT {
-  return ansi_color_escape<Char>(foreground, internal::data::FOREGROUND_COLOR);
+  return ansi_color_escape<Char>(foreground, internal::data::foreground_color);
 }
 
 template <typename Char>
 FMT_CONSTEXPR ansi_color_escape<Char> make_background_color(
     internal::color_type background) FMT_NOEXCEPT {
-  return ansi_color_escape<Char>(background, internal::data::BACKGROUND_COLOR);
+  return ansi_color_escape<Char>(background, internal::data::background_color);
 }
 
 template <typename Char>
@@ -504,17 +455,17 @@ inline void fputs<wchar_t>(const wchar_t* chars, FILE* stream) FMT_NOEXCEPT {
 }
 
 template <typename Char> inline void reset_color(FILE* stream) FMT_NOEXCEPT {
-  fputs(internal::data::RESET_COLOR, stream);
+  fputs(internal::data::reset_color, stream);
 }
 
 template <> inline void reset_color<wchar_t>(FILE* stream) FMT_NOEXCEPT {
-  fputs(internal::data::WRESET_COLOR, stream);
+  fputs(internal::data::wreset_color, stream);
 }
 
 template <typename Char>
 inline void reset_color(basic_memory_buffer<Char>& buffer) FMT_NOEXCEPT {
-  const char* begin = data::RESET_COLOR;
-  const char* end = begin + sizeof(data::RESET_COLOR) - 1;
+  const char* begin = data::reset_color;
+  const char* end = begin + sizeof(data::reset_color) - 1;
   buffer.append(begin, end);
 }
 
@@ -625,11 +576,10 @@ inline std::basic_string<Char> vformat(
 template <typename S, typename... Args, typename Char = char_t<S> >
 inline std::basic_string<Char> format(const text_style& ts, const S& format_str,
                                       const Args&... args) {
-  return internal::vformat(ts, to_string_view(format_str),
-                           {internal::make_args_checked(format_str, args...)});
+  return internal::vformat(
+      ts, to_string_view(format_str),
+      {internal::make_args_checked<Args...>(format_str, args...)});
 }
-
-#endif
 
 FMT_END_NAMESPACE
 

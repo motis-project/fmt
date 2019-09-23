@@ -69,7 +69,7 @@ FMT_BEGIN_NAMESPACE
   A reference to a null-terminated string. It can be constructed from a C
   string or ``std::string``.
 
-  You can use one of the following typedefs for common character types:
+  You can use one of the following type aliases for common character types:
 
   +---------------+-----------------------------+
   | Type          | Definition                  |
@@ -108,8 +108,8 @@ template <typename Char> class basic_cstring_view {
   const Char* c_str() const { return data_; }
 };
 
-typedef basic_cstring_view<char> cstring_view;
-typedef basic_cstring_view<wchar_t> wcstring_view;
+using cstring_view = basic_cstring_view<char>;
+using wcstring_view = basic_cstring_view<wchar_t>;
 
 // An error code.
 class error_code {
@@ -261,18 +261,12 @@ class file {
 // Returns the memory page size.
 long getpagesize();
 
-#if (defined(LC_NUMERIC_MASK) || defined(_MSC_VER)) &&                        \
-    !defined(__ANDROID__) && !defined(__CYGWIN__) && !defined(__OpenBSD__) && \
-    !defined(__NEWLIB_H__)
-#  define FMT_LOCALE
-#endif
-
 #ifdef FMT_LOCALE
 // A "C" numeric locale.
 class Locale {
  private:
-#  ifdef _MSC_VER
-  typedef _locale_t locale_t;
+#  ifdef _WIN32
+  using locale_t = _locale_t;
 
   enum { LC_NUMERIC_MASK = LC_NUMERIC };
 
@@ -293,14 +287,14 @@ class Locale {
   void operator=(const Locale&) = delete;
 
  public:
-  typedef locale_t Type;
+  using type = locale_t;
 
   Locale() : locale_(newlocale(LC_NUMERIC_MASK, "C", nullptr)) {
     if (!locale_) FMT_THROW(system_error(errno, "cannot create locale"));
   }
   ~Locale() { freelocale(locale_); }
 
-  Type get() const { return locale_; }
+  type get() const { return locale_; }
 
   // Converts string to floating-point number and advances str past the end
   // of the parsed input.

@@ -16,6 +16,7 @@
 
 using fmt::format;
 using fmt::format_error;
+using fmt::internal::max_value;
 
 const unsigned BIG_NUM = INT_MAX + 1u;
 
@@ -295,13 +296,12 @@ void TestLength(const char* length_spec, U value) {
   long long signed_value = 0;
   unsigned long long unsigned_value = 0;
   // Apply integer promotion to the argument.
-  using std::numeric_limits;
-  unsigned long long max = numeric_limits<U>::max();
+  unsigned long long max = max_value<U>();
   using fmt::internal::const_check;
-  if (const_check(max <= static_cast<unsigned>(numeric_limits<int>::max()))) {
+  if (const_check(max <= static_cast<unsigned>(max_value<int>()))) {
     signed_value = static_cast<int>(value);
     unsigned_value = static_cast<unsigned>(value);
-  } else if (const_check(max <= numeric_limits<unsigned>::max())) {
+  } else if (const_check(max <= max_value<unsigned>())) {
     signed_value = static_cast<unsigned>(value);
     unsigned_value = static_cast<unsigned>(value);
   }
@@ -332,25 +332,25 @@ void TestLength(const char* length_spec, U value) {
 }
 
 template <typename T> void TestLength(const char* length_spec) {
-  T min = std::numeric_limits<T>::min(), max = std::numeric_limits<T>::max();
+  T min = std::numeric_limits<T>::min(), max = max_value<T>();
   TestLength<T>(length_spec, 42);
   TestLength<T>(length_spec, -42);
   TestLength<T>(length_spec, min);
   TestLength<T>(length_spec, max);
   TestLength<T>(length_spec, static_cast<long long>(min) - 1);
-  unsigned long long long_long_max = std::numeric_limits<long long>::max();
+  unsigned long long long_long_max = max_value<long long>();
   if (static_cast<unsigned long long>(max) < long_long_max)
     TestLength<T>(length_spec, static_cast<long long>(max) + 1);
   TestLength<T>(length_spec, std::numeric_limits<short>::min());
-  TestLength<T>(length_spec, std::numeric_limits<unsigned short>::max());
+  TestLength<T>(length_spec, max_value<unsigned short>());
   TestLength<T>(length_spec, std::numeric_limits<int>::min());
-  TestLength<T>(length_spec, std::numeric_limits<int>::max());
+  TestLength<T>(length_spec, max_value<int>());
   TestLength<T>(length_spec, std::numeric_limits<unsigned>::min());
-  TestLength<T>(length_spec, std::numeric_limits<unsigned>::max());
+  TestLength<T>(length_spec, max_value<unsigned>());
   TestLength<T>(length_spec, std::numeric_limits<long long>::min());
-  TestLength<T>(length_spec, std::numeric_limits<long long>::max());
+  TestLength<T>(length_spec, max_value<long long>());
   TestLength<T>(length_spec, std::numeric_limits<unsigned long long>::min());
-  TestLength<T>(length_spec, std::numeric_limits<unsigned long long>::max());
+  TestLength<T>(length_spec, max_value<unsigned long long>());
 }
 
 TEST(PrintfTest, Length) {
@@ -366,7 +366,7 @@ TEST(PrintfTest, Length) {
   TestLength<intmax_t>("j");
   TestLength<std::size_t>("z");
   TestLength<std::ptrdiff_t>("t");
-  long double max = std::numeric_limits<long double>::max();
+  long double max = max_value<long double>();
   EXPECT_PRINTF(fmt::format("{:.6}", max), "%g", max);
   EXPECT_PRINTF(fmt::format("{:.6}", max), "%Lg", max);
 }
@@ -389,7 +389,7 @@ TEST(PrintfTest, Int) {
 TEST(PrintfTest, long_long) {
   // fmt::printf allows passing long long arguments to %d without length
   // specifiers.
-  long long max = std::numeric_limits<long long>::max();
+  long long max = max_value<long long>();
   EXPECT_PRINTF(fmt::format("{}", max), "%d", max);
 }
 
@@ -425,7 +425,7 @@ TEST(PrintfTest, Inf) {
 
 TEST(PrintfTest, Char) {
   EXPECT_PRINTF("x", "%c", 'x');
-  int max = std::numeric_limits<int>::max();
+  int max = max_value<int>();
   EXPECT_PRINTF(fmt::format("{}", static_cast<char>(max)), "%c", max);
   // EXPECT_PRINTF("x", "%lc", L'x');
   EXPECT_PRINTF(L"x", L"%c", L'x');
@@ -535,11 +535,11 @@ TEST(PrintfTest, VSPrintfMakeArgsExample) {
   fmt::basic_format_args<fmt::printf_context> args2(as2);
   EXPECT_EQ("[42] something happened",
             fmt::vsprintf("[%d] %s happened", args2));
-  // the older gcc versions can't cast the return value
+  // The older gcc versions can't cast the return value.
 #if !defined(__GNUC__) || (__GNUC__ > 4)
   EXPECT_EQ("[42] something happened",
             fmt::vsprintf("[%d] %s happened",
-                          fmt::make_printf_args(42, "something")));
+                          {fmt::make_printf_args(42, "something")}));
 #endif
 }
 
@@ -557,13 +557,11 @@ TEST(PrintfTest, VSPrintfMakeWArgsExample) {
 #if !defined(__GNUC__) || (__GNUC__ > 4)
   EXPECT_EQ(L"[42] something happened",
             fmt::vsprintf(L"[%d] %s happened",
-                          fmt::make_wprintf_args(42, L"something")));
+                          {fmt::make_wprintf_args(42, L"something")}));
 #endif
 }
 
-typedef fmt::printf_arg_formatter<
-    fmt::back_insert_range<fmt::internal::buffer<char>>>
-    formatter_t;
+typedef fmt::printf_arg_formatter<fmt::buffer_range<char>> formatter_t;
 typedef fmt::basic_printf_context<formatter_t::iterator, char> context_t;
 
 // A custom printf argument formatter that doesn't print `-` for floating-point
@@ -573,8 +571,8 @@ class custom_printf_arg_formatter : public formatter_t {
   using formatter_t::iterator;
 
   custom_printf_arg_formatter(formatter_t::iterator iter,
-                              formatter_t::format_specs& spec, context_t& ctx)
-      : formatter_t(iter, spec, ctx) {}
+                              formatter_t::format_specs& specs, context_t& ctx)
+      : formatter_t(iter, specs, ctx) {}
 
   using formatter_t::operator();
 
@@ -585,7 +583,7 @@ class custom_printf_arg_formatter : public formatter_t {
   iterator operator()(double value) {
 #endif
       // Comparing a float to 0.0 is safe.
-      if (round(value * pow(10, spec()->precision)) == 0.0) value = 0;
+      if (round(value * pow(10, specs()->precision)) == 0.0) value = 0;
   return formatter_t::operator()(value);
 }
 }
@@ -602,7 +600,7 @@ std::string custom_vformat(fmt::string_view format_str, format_args_t args) {
 template <typename... Args>
 std::string custom_format(const char* format_str, const Args&... args) {
   auto va = fmt::make_printf_args(args...);
-  return custom_vformat(format_str, va);
+  return custom_vformat(format_str, {va});
 }
 
 TEST(PrintfTest, CustomFormat) {
