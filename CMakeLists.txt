@@ -160,6 +160,7 @@ if (HAVE_OPEN)
 endif ()
 
 add_library(fmt ${FMT_SOURCES} ${FMT_HEADERS} README.rst ChangeLog.rst)
+target_compile_features(fmt PUBLIC cxx_std_17)
 add_library(fmt::fmt ALIAS fmt)
 
 if (HAVE_STRTOD_L)
