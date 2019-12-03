@@ -1,4 +1,4 @@
-// Formatting library for C++
+// Formatting library for C++ - legacy printf implementation
 //
 // Copyright (c) 2012 - 2016, Victor Zverovich
 // All rights reserved.
@@ -8,17 +8,13 @@
 #ifndef FMT_PRINTF_H_
 #define FMT_PRINTF_H_
 
-#include <algorithm>  // std::fill_n
+#include <algorithm>  // std::max
 #include <limits>     // std::numeric_limits
 
 #include "ostream.h"
 
 FMT_BEGIN_NAMESPACE
 namespace internal {
-
-// A helper function to suppress bogus "conditional expression is constant"
-// warnings.
-template <typename T> inline T const_check(T value) { return value; }
 
 // Checks if a value fits in int - used to avoid warnings about comparing
 // signed and unsigned integers.
@@ -235,7 +231,7 @@ class printf_arg_formatter : public internal::arg_formatter_base<Range> {
   printf_arg_formatter(iterator iter, format_specs& specs, context_type& ctx)
       : base(Range(iter), &specs, internal::locale_ref()), context_(ctx) {}
 
-  template <typename T, FMT_ENABLE_IF(std::is_integral<T>::value)>
+  template <typename T, FMT_ENABLE_IF(fmt::internal::is_integral<T>::value)>
   iterator operator()(T value) {
     // MSVC2013 fails to compile separate overloads for bool and char_type so
     // use std::is_same instead.
@@ -332,7 +328,7 @@ template <typename OutputIt, typename Char> class basic_printf_context {
 
   OutputIt out_;
   basic_format_args<basic_printf_context> args_;
-  basic_parse_context<Char> parse_ctx_;
+  basic_format_parse_context<Char> parse_ctx_;
 
   static void parse_flags(format_specs& specs, const Char*& it,
                           const Char* end);
@@ -361,7 +357,7 @@ template <typename OutputIt, typename Char> class basic_printf_context {
 
   format_arg arg(unsigned id) const { return args_.get(id); }
 
-  basic_parse_context<Char>& parse_context() { return parse_ctx_; }
+  basic_format_parse_context<Char>& parse_context() { return parse_ctx_; }
 
   FMT_CONSTEXPR void on_error(const char* message) {
     parse_ctx_.on_error(message);
@@ -469,6 +465,7 @@ OutputIt basic_printf_context<OutputIt, Char>::format() {
 
     // Parse argument index, flags and width.
     unsigned arg_index = parse_header(it, end, specs);
+    if (arg_index == 0) on_error("argument index out of range");
 
     // Parse precision.
     if (it != end && *it == '.') {

@@ -77,7 +77,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
       -Wcast-align -Wnon-virtual-dtor
       -Wctor-dtor-privacy -Wdisabled-optimization
       -Winvalid-pch -Woverloaded-virtual
-      -Wconversion
+      -Wconversion -Wswitch-enum
       -Wno-ctor-dtor-privacy -Wno-format-nonliteral -Wno-shadow)
   if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.6)
       set(PEDANTIC_COMPILE_FLAGS ${PEDANTIC_COMPILE_FLAGS} -Wnoexcept
@@ -97,7 +97,7 @@ endif ()
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   set(PEDANTIC_COMPILE_FLAGS -Wall -Wextra -pedantic -Wconversion
-      -Wno-sign-conversion)
+      -Wno-sign-conversion -Wdeprecated -Wweak-vtables)
   check_cxx_compiler_flag(-Wzero-as-null-pointer-constant HAS_NULLPTR_WARNING)
   if (HAS_NULLPTR_WARNING)
     set(PEDANTIC_COMPILE_FLAGS ${PEDANTIC_COMPILE_FLAGS}
@@ -134,10 +134,8 @@ endif ()
 
 include(CheckSymbolExists)
 if (WIN32)
-  check_symbol_exists(open io.h HAVE_OPEN)
   check_symbol_exists(_strtod_l "${strtod_l_headers}" HAVE_STRTOD_L)
 else ()
-  check_symbol_exists(open fcntl.h HAVE_OPEN)
   check_symbol_exists(strtod_l "${strtod_l_headers}" HAVE_STRTOD_L)
 endif ()
 
@@ -151,13 +149,8 @@ endfunction()
 
 # Define the fmt library, its includes and the needed defines.
 add_headers(FMT_HEADERS chrono.h color.h compile.h core.h format.h format-inl.h
-                        locale.h ostream.h printf.h ranges.h
-                        safe-duration-cast.h)
-set(FMT_SOURCES src/format.cc)
-if (HAVE_OPEN)
-  add_headers(FMT_HEADERS posix.h)
-  set(FMT_SOURCES ${FMT_SOURCES} src/posix.cc)
-endif ()
+                        locale.h ostream.h posix.h printf.h ranges.h)
+set(FMT_SOURCES src/format.cc src/posix.cc)
 
 add_library(fmt ${FMT_SOURCES} ${FMT_HEADERS} README.rst ChangeLog.rst)
 target_compile_features(fmt PUBLIC cxx_std_17)
@@ -255,7 +248,9 @@ if (FMT_INSTALL)
 
   # Install the library and headers.
   install(TARGETS ${INSTALL_TARGETS} EXPORT ${targets_export_name}
-          DESTINATION ${FMT_LIB_DIR})
+          LIBRARY DESTINATION ${FMT_LIB_DIR}
+          ARCHIVE DESTINATION ${FMT_LIB_DIR}
+          RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   install(FILES $<TARGET_PDB_FILE:${INSTALL_TARGETS}>
           DESTINATION ${FMT_LIB_DIR} OPTIONAL)

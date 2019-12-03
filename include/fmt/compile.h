@@ -101,7 +101,7 @@ class format_string_compiler : public error_handler {
   PartHandler handler_;
   part part_;
   basic_string_view<Char> format_str_;
-  basic_parse_context<Char> parse_context_;
+  basic_format_parse_context<Char> parse_context_;
 
  public:
   FMT_CONSTEXPR format_string_compiler(basic_string_view<Char> format_str,
@@ -136,8 +136,8 @@ class format_string_compiler : public error_handler {
   FMT_CONSTEXPR const Char* on_format_specs(const Char* begin,
                                             const Char* end) {
     auto repl = typename part::replacement();
-    dynamic_specs_handler<basic_parse_context<Char>> handler(repl.specs,
-                                                             parse_context_);
+    dynamic_specs_handler<basic_format_parse_context<Char>> handler(
+        repl.specs, parse_context_);
     auto it = parse_format_specs(begin, end, handler);
     if (*it != '}') on_error("missing '}' in format string");
     repl.arg_id = part_.part_kind == part::kind::arg_index
@@ -160,8 +160,9 @@ FMT_CONSTEXPR void compile_format_string(basic_string_view<Char> format_str,
 }
 
 template <typename Range, typename Context, typename Id>
-void format_arg(basic_parse_context<typename Range::value_type>& parse_ctx,
-                Context& ctx, Id arg_id) {
+void format_arg(
+    basic_format_parse_context<typename Range::value_type>& parse_ctx,
+    Context& ctx, Id arg_id) {
   ctx.advance_to(
       visit_format_arg(arg_formatter<Range>(ctx, &parse_ctx), ctx.arg(arg_id)));
 }
@@ -172,7 +173,8 @@ template <typename Context, typename Range, typename CompiledFormat>
 auto vformat_to(Range out, CompiledFormat& cf, basic_format_args<Context> args)
     -> typename Context::iterator {
   using char_type = typename Context::char_type;
-  basic_parse_context<char_type> parse_ctx(to_string_view(cf.format_str_));
+  basic_format_parse_context<char_type> parse_ctx(
+      to_string_view(cf.format_str_));
   Context ctx(out.begin(), args);
 
   const auto& parts = cf.parts();
@@ -331,11 +333,12 @@ template <typename... Args> struct type_list {};
 
 // Returns a reference to the argument at index N from [first, rest...].
 template <int N, typename T, typename... Args>
-const auto& get(const T& first, const Args&... rest) {
-  if constexpr (sizeof...(Args) == 0)
+constexpr const auto& get(const T& first, const Args&... rest) {
+  static_assert(N < 1 + sizeof...(Args), "index is out of bounds");
+  if constexpr (N == 0)
     return first;
   else
-    return get(rest...);
+    return get<N - 1>(rest...);
 }
 
 template <int N, typename> struct get_type_impl;
@@ -370,6 +373,13 @@ OutputIt format_default(OutputIt out, T value) {
   // TODO: reserve
   format_int fi(value);
   return std::copy(fi.data(), fi.data() + fi.size(), out);
+}
+
+template <typename Char, typename OutputIt>
+OutputIt format_default(OutputIt out, double value) {
+  writer w(out);
+  w.write(value);
+  return w.out();
 }
 
 template <typename Char, typename OutputIt>
@@ -413,7 +423,7 @@ constexpr concat<L, R> make_concat(L lhs, R rhs) {
   return {lhs, rhs};
 }
 
-struct unknown {};
+struct unknown_format {};
 
 template <typename Char>
 constexpr size_t parse_text(basic_string_view<Char> str, size_t pos) {
@@ -430,7 +440,8 @@ template <typename Args, size_t POS, int ID, typename T, typename S>
 constexpr auto parse_tail(T head, S format_str) {
   if constexpr (POS != to_string_view(format_str).size()) {
     constexpr auto tail = compile_format_string<Args, POS, ID>(format_str);
-    if constexpr (std::is_same<remove_cvref_t<decltype(tail)>, unknown>())
+    if constexpr (std::is_same<remove_cvref_t<decltype(tail)>,
+                               unknown_format>())
       return tail;
     else
       return make_concat(head, tail);
@@ -440,7 +451,7 @@ constexpr auto parse_tail(T head, S format_str) {
 }
 
 // Compiles a non-empty format string and returns the compiled representation
-// or unknown() on unrecognized input.
+// or unknown_format() on unrecognized input.
 template <typename Args, size_t POS, int ID, typename S>
 constexpr auto compile_format_string(S format_str) {
   using char_type = typename S::char_type;
@@ -456,10 +467,10 @@ constexpr auto compile_format_string(S format_str) {
         return parse_tail<Args, POS + 2, ID + 1>(field<char_type, type, ID>(),
                                                  format_str);
       } else {
-        return unknown();
+        return unknown_format();
       }
     } else {
-      return unknown();
+      return unknown_format();
     }
   } else if constexpr (str[POS] == '}') {
     if (POS + 1 == str.size())
@@ -487,7 +498,7 @@ constexpr auto compile(S format_str) {
         internal::compile_format_string<internal::type_list<Args...>, 0, 0>(
             format_str);
     if constexpr (std::is_same<remove_cvref_t<decltype(result)>,
-                               internal::unknown>()) {
+                               internal::unknown_format>()) {
       return internal::compiled_format<S, Args...>(to_string_view(format_str));
     } else {
       return result;
@@ -568,10 +579,7 @@ format_to_n_result<OutputIt> format_to_n(OutputIt out, size_t n,
 
 template <typename CompiledFormat, typename... Args>
 std::size_t formatted_size(const CompiledFormat& cf, const Args&... args) {
-  return format_to(
-             internal::counting_iterator<typename CompiledFormat::char_type>(),
-             cf, args...)
-      .count();
+  return format_to(internal::counting_iterator(), cf, args...).count();
 }
 
 FMT_END_NAMESPACE
