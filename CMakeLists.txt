@@ -79,7 +79,6 @@ endif ()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
   "${CMAKE_CURRENT_SOURCE_DIR}/support/cmake")
 
-include(cxx14)
 include(CheckCXXCompilerFlag)
 
 list(FIND CMAKE_CXX_COMPILE_FEATURES "cxx_variadic_templates" index)
@@ -176,6 +175,7 @@ add_headers(FMT_HEADERS chrono.h color.h compile.h core.h format.h format-inl.h
 set(FMT_SOURCES src/format.cc src/os.cc)
 
 add_library(fmt ${FMT_SOURCES} ${FMT_HEADERS} README.rst ChangeLog.rst)
+target_compile_features(fmt PUBLIC cxx_std_17)
 add_library(fmt::fmt ALIAS fmt)
 
 if (HAVE_STRTOD_L)
@@ -189,9 +189,7 @@ if (FMT_PEDANTIC)
   target_compile_options(fmt PRIVATE ${PEDANTIC_COMPILE_FLAGS})
 endif ()
 
-target_compile_features(fmt INTERFACE ${FMT_REQUIRED_FEATURES})
-
-target_include_directories(fmt PUBLIC
+target_include_directories(fmt SYSTEM PUBLIC
   $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
@@ -224,9 +222,8 @@ add_library(fmt-header-only INTERFACE)
 add_library(fmt::fmt-header-only ALIAS fmt-header-only)
 
 target_compile_definitions(fmt-header-only INTERFACE FMT_HEADER_ONLY=1)
-target_compile_features(fmt-header-only INTERFACE ${FMT_REQUIRED_FEATURES})
 
-target_include_directories(fmt-header-only INTERFACE
+target_include_directories(fmt-header-only SYSTEM INTERFACE
   $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 
