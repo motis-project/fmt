@@ -10,9 +10,10 @@
 #endif
 
 #include "fmt/chrono.h"
-#include "gtest-extra.h"
 
 #include <iomanip>
+
+#include "gtest-extra.h"
 
 std::tm make_tm() {
   auto time = std::tm();
@@ -94,10 +95,21 @@ TEST(TimeTest, GMTime) {
   EXPECT_TRUE(EqualTime(tm, fmt::gmtime(t)));
 }
 
+TEST(TimeTest, TimePoint) {
+  std::chrono::system_clock::time_point point = std::chrono::system_clock::now();
+
+  std::time_t t = std::chrono::system_clock::to_time_t(point);
+  std::tm tm = *std::localtime(&t);
+  char strftime_output[256];
+  std::strftime(strftime_output, sizeof(strftime_output), "It is %Y-%m-%d %H:%M:%S", &tm);
+
+  EXPECT_EQ(strftime_output, fmt::format("It is {:%Y-%m-%d %H:%M:%S}", point));
+}
+
 #define EXPECT_TIME(spec, time, duration)                 \
   {                                                       \
-    std::locale loc("ja_JP.utf8");                        \
-    EXPECT_EQ(format_tm(time, spec, loc),                 \
+    std::locale jp_loc("ja_JP.utf8");                     \
+    EXPECT_EQ(format_tm(time, spec, jp_loc),              \
               fmt::format(loc, "{:" spec "}", duration)); \
   }
 
@@ -381,6 +393,10 @@ TEST(ChronoTest, SpecialDurations) {
             "03:33");
   EXPECT_EQ(fmt::format("{:%T}", std::chrono::duration<char, std::mega>{2}),
             "03:33:20");
+}
+
+TEST(ChronoTest, UnsignedDuration) {
+  EXPECT_EQ("42s", fmt::format("{}", std::chrono::duration<unsigned>(42)));
 }
 
 #endif  // FMT_STATIC_THOUSANDS_SEPARATOR
