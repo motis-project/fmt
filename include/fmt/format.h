@@ -35,6 +35,7 @@
 
 #include <cerrno>
 #include <cmath>
+#include <cstddef>  // std::byte
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -281,6 +282,20 @@ FMT_END_NAMESPACE
 FMT_BEGIN_NAMESPACE
 namespace detail {
 
+#if __cplusplus >= 202002L
+#  define FMT_CONSTEXPR20 constexpr
+#else
+#  define FMT_CONSTEXPR20 inline
+#endif
+
+constexpr bool is_constant_evaluated() FMT_DETECTED_NOEXCEPT {
+#ifdef __cpp_lib_is_constant_evaluated
+  return std::is_constant_evaluated();
+#else
+  return false;
+#endif
+}
+
 // An equivalent of `*reinterpret_cast<Dest*>(&source)` that doesn't have
 // undefined behavior (e.g. due to type aliasing).
 // Example: uint64_t d = bit_cast<uint64_t>(2.718);
@@ -390,7 +405,7 @@ inline buffer_appender<T> reserve(buffer_appender<T> it, size_t n) {
   return it;
 }
 
-template <typename Iterator> inline Iterator& reserve(Iterator& it, size_t) {
+template <typename Iterator> constexpr Iterator& reserve(Iterator& it, size_t) {
   return it;
 }
 
@@ -414,7 +429,7 @@ inline std::back_insert_iterator<Container> base_iterator(
 }
 
 template <typename Iterator>
-inline Iterator base_iterator(Iterator, Iterator it) {
+constexpr Iterator base_iterator(Iterator, Iterator it) {
   return it;
 }
 
@@ -587,14 +602,17 @@ using needs_conversion = bool_constant<
 
 template <typename OutChar, typename InputIt, typename OutputIt,
           FMT_ENABLE_IF(!needs_conversion<InputIt, OutChar>::value)>
-OutputIt copy_str(InputIt begin, InputIt end, OutputIt it) {
+FMT_CONSTEXPR OutputIt copy_str(InputIt begin, InputIt end, OutputIt it) {
   while (begin != end) *it++ = *begin++;
   return it;
 }
 
 template <typename OutChar, typename InputIt,
           FMT_ENABLE_IF(!needs_conversion<InputIt, OutChar>::value)>
-inline OutChar* copy_str(InputIt begin, InputIt end, OutChar* out) {
+FMT_CONSTEXPR20 OutChar* copy_str(InputIt begin, InputIt end, OutChar* out) {
+  if (is_constant_evaluated()) {
+    return copy_str<OutChar, InputIt, OutChar*>(begin, end, out);
+  }
   return std::uninitialized_copy(begin, end, out);
 }
 
@@ -603,6 +621,14 @@ template <typename OutChar, typename InputIt, typename OutputIt,
 OutputIt copy_str(InputIt begin, InputIt end, OutputIt it) {
   while (begin != end) *it++ = static_cast<char8_type>(*begin++);
   return it;
+}
+
+template <typename OutChar, typename InputIt,
+          FMT_ENABLE_IF(!needs_conversion<InputIt, OutChar>::value)>
+buffer_appender<OutChar> copy_str(InputIt begin, InputIt end,
+                                  buffer_appender<OutChar> out) {
+  get_container(out).append(begin, end);
+  return out;
 }
 
 template <typename Char, typename InputIt>
@@ -943,17 +969,7 @@ FMT_EXTERN template struct basic_data<void>;
 // This is a struct rather than an alias to avoid shadowing warnings in gcc.
 struct data : basic_data<> {};
 
-#ifdef FMT_BUILTIN_CLZLL
-// Returns the number of decimal digits in n. Leading zeros are not counted
-// except for n == 0 in which case count_digits returns 1.
-inline int count_digits(uint64_t n) {
-  // https://github.com/fmtlib/format-benchmark/blob/master/digits10
-  auto t = bsr2log10(FMT_BUILTIN_CLZLL(n | 1) ^ 63);
-  return t - (n < data::zero_or_powers_of_10_64_new[t]);
-}
-#else
-// Fallback version of count_digits used when __builtin_clz is not available.
-inline int count_digits(uint64_t n) {
+template <typename T> FMT_CONSTEXPR int count_digits_fallback(T n) {
   int count = 1;
   for (;;) {
     // Integer division is slow so do it for a group of four digits instead
@@ -967,10 +983,25 @@ inline int count_digits(uint64_t n) {
     count += 4;
   }
 }
+
+#ifdef FMT_BUILTIN_CLZLL
+// Returns the number of decimal digits in n. Leading zeros are not counted
+// except for n == 0 in which case count_digits returns 1.
+FMT_CONSTEXPR20 int count_digits(uint64_t n) {
+  if (is_constant_evaluated()) {
+    return count_digits_fallback(n);
+  }
+  // https://github.com/fmtlib/format-benchmark/blob/master/digits10
+  auto t = bsr2log10(FMT_BUILTIN_CLZLL(n | 1) ^ 63);
+  return t - (n < data::zero_or_powers_of_10_64_new[t]);
+}
+#else
+// Fallback version of count_digits used when __builtin_clz is not available.
+FMT_CONSTEXPR int count_digits(uint64_t n) { return count_digits_fallback(n); }
 #endif
 
 #if FMT_USE_INT128
-inline int count_digits(uint128_t n) {
+FMT_CONSTEXPR int count_digits(uint128_t n) {
   int count = 1;
   for (;;) {
     // Integer division is slow so do it for a group of four digits instead
@@ -987,7 +1018,7 @@ inline int count_digits(uint128_t n) {
 #endif
 
 // Counts the number of digits in n. BITS = log2(radix).
-template <unsigned BITS, typename UInt> inline int count_digits(UInt n) {
+template <unsigned BITS, typename UInt> FMT_CONSTEXPR int count_digits(UInt n) {
   int num_digits = 0;
   do {
     ++num_digits;
@@ -1007,7 +1038,10 @@ template <> int count_digits<4>(detail::fallback_uintptr n);
 
 #ifdef FMT_BUILTIN_CLZ
 // Optional version of count_digits for better performance on 32-bit platforms.
-inline int count_digits(uint32_t n) {
+FMT_CONSTEXPR20 int count_digits(uint32_t n) {
+  if (is_constant_evaluated()) {
+    return count_digits_fallback(n);
+  }
   auto t = bsr2log10(FMT_BUILTIN_CLZ(n | 1) ^ 31);
   return t - (n < data::zero_or_powers_of_10_32_new[t]);
 }
@@ -1067,11 +1101,20 @@ template <typename Iterator> struct format_decimal_result {
 // buffer of specified size. The caller must ensure that the buffer is large
 // enough.
 template <typename Char, typename UInt>
-inline format_decimal_result<Char*> format_decimal(Char* out, UInt value,
-                                                   int size) {
+FMT_CONSTEXPR20 format_decimal_result<Char*> format_decimal(Char* out,
+                                                            UInt value,
+                                                            int size) {
   FMT_ASSERT(size >= count_digits(value), "invalid digit count");
   out += size;
   Char* end = out;
+  if (is_constant_evaluated()) {
+    while (value >= 10) {
+      *--out = static_cast<Char>('0' + value % 10);
+      value /= 10;
+    }
+    *--out = static_cast<Char>('0' + value);
+    return {out, end};
+  }
   while (value >= 100) {
     // Integer division is slow so do it for a group of two digits instead
     // of for every digit. The idea comes from the talk by Alexandrescu
@@ -1166,8 +1209,8 @@ template <typename T = void> struct null {};
 template <typename Char> struct fill_t {
  private:
   enum { max_size = 4 };
-  Char data_[max_size];
-  unsigned char size_;
+  Char data_[max_size] = {Char(' '), Char(0), Char(0), Char(0)};
+  unsigned char size_ = 1;
 
  public:
   FMT_CONSTEXPR void operator=(basic_string_view<Char> s) {
@@ -1186,13 +1229,6 @@ template <typename Char> struct fill_t {
   FMT_CONSTEXPR Char& operator[](size_t index) { return data_[index]; }
   FMT_CONSTEXPR const Char& operator[](size_t index) const {
     return data_[index];
-  }
-
-  static FMT_CONSTEXPR fill_t<Char> make() {
-    auto fill = fill_t<Char>();
-    fill[0] = Char(' ');
-    fill.size_ = 1;
-    return fill;
   }
 };
 }  // namespace detail
@@ -1225,8 +1261,7 @@ template <typename Char> struct basic_format_specs {
         type(0),
         align(align::none),
         sign(sign::none),
-        alt(false),
-        fill(detail::fill_t<Char>::make()) {}
+        alt(false) {}
 };
 
 using format_specs = basic_format_specs<char>;
@@ -1396,7 +1431,6 @@ FMT_CONSTEXPR float_specs parse_float_type_spec(
   switch (specs.type) {
   case 0:
     result.format = float_format::general;
-    result.showpoint |= specs.precision > 0;
     break;
   case 'G':
     result.upper = true;
@@ -2049,24 +2083,17 @@ OutputIt write(OutputIt out, string_view value) {
 }
 
 template <typename Char, typename OutputIt>
-OutputIt write(OutputIt out, basic_string_view<Char> value) {
+FMT_CONSTEXPR OutputIt write(OutputIt out, basic_string_view<Char> value) {
   auto it = reserve(out, value.size());
   it = copy_str<Char>(value.begin(), value.end(), it);
   return base_iterator(out, it);
-}
-
-template <typename Char>
-buffer_appender<Char> write(buffer_appender<Char> out,
-                            basic_string_view<Char> value) {
-  get_container(out).append(value.begin(), value.end());
-  return out;
 }
 
 template <typename Char, typename OutputIt, typename T,
           FMT_ENABLE_IF(is_integral<T>::value &&
                         !std::is_same<T, bool>::value &&
                         !std::is_same<T, Char>::value)>
-OutputIt write(OutputIt out, T value) {
+FMT_CONSTEXPR OutputIt write(OutputIt out, T value) {
   auto abs_value = static_cast<uint32_or_64_or_128_t<T>>(value);
   bool negative = is_negative(value);
   // Don't do -abs_value since it trips unsigned-integer-overflow sanitizer.
@@ -2084,20 +2111,28 @@ OutputIt write(OutputIt out, T value) {
   return base_iterator(out, it);
 }
 
+template <typename Char, typename OutputIt, typename T,
+          FMT_ENABLE_IF(std::is_enum<T>::value &&
+                        !std::is_same<T, Char>::value)>
+FMT_CONSTEXPR OutputIt write(OutputIt out, T value) {
+  return write<Char>(
+      out, static_cast<typename std::underlying_type<T>::type>(value));
+}
+
 template <typename Char, typename OutputIt>
-OutputIt write(OutputIt out, bool value) {
+constexpr OutputIt write(OutputIt out, bool value) {
   return write<Char>(out, string_view(value ? "true" : "false"));
 }
 
 template <typename Char, typename OutputIt>
-OutputIt write(OutputIt out, Char value) {
+FMT_CONSTEXPR OutputIt write(OutputIt out, Char value) {
   auto it = reserve(out, 1);
   *it++ = value;
   return base_iterator(out, it);
 }
 
 template <typename Char, typename OutputIt>
-OutputIt write(OutputIt out, const Char* value) {
+FMT_CONSTEXPR OutputIt write(OutputIt out, const Char* value) {
   if (!value) {
     FMT_THROW(format_error("string pointer is null"));
   } else {
@@ -3069,10 +3104,9 @@ FMT_CONSTEXPR const typename ParseContext::char_type* parse_format_specs(
     ParseContext& ctx) {
   using char_type = typename ParseContext::char_type;
   using context = buffer_context<char_type>;
-  using mapped_type =
-      conditional_t<detail::mapped_type_constant<T, context>::value !=
-                        type::custom_type,
-                    decltype(arg_mapper<context>().map(std::declval<T>())), T>;
+  using mapped_type = conditional_t<
+      detail::mapped_type_constant<T, context>::value != type::custom_type,
+      decltype(arg_mapper<context>().map(std::declval<const T&>())), T>;
   auto f = conditional_t<has_formatter<mapped_type, context>::value,
                          formatter<mapped_type, char_type>,
                          detail::fallback_formatter<T, char_type>>();
@@ -3513,7 +3547,7 @@ struct formatter<T, Char,
   struct formatter<Type, Char> : formatter<Base, Char> {                      \
     template <typename FormatContext>                                         \
     auto format(Type const& val, FormatContext& ctx) -> decltype(ctx.out()) { \
-      return formatter<Base, Char>::format(val, ctx);                         \
+      return formatter<Base, Char>::format(static_cast<Base>(val), ctx);      \
     }                                                                         \
   }
 
@@ -3527,6 +3561,9 @@ FMT_FORMAT_AS(Char*, const Char*);
 FMT_FORMAT_AS(std::basic_string<Char>, basic_string_view<Char>);
 FMT_FORMAT_AS(std::nullptr_t, const void*);
 FMT_FORMAT_AS(detail::std_string_view<Char>, basic_string_view<Char>);
+#if __cplusplus >= 201703L
+FMT_FORMAT_AS(std::byte, unsigned);
+#endif
 
 template <typename Char>
 struct formatter<void*, Char> : formatter<const void*, Char> {
@@ -3568,7 +3605,7 @@ template <typename Char = char> class dynamic_formatter {
 
  public:
   template <typename ParseContext>
-  auto parse(ParseContext& ctx) -> decltype(ctx.begin()) {
+  FMT_CONSTEXPR auto parse(ParseContext& ctx) -> decltype(ctx.begin()) {
     format_str_ = ctx.begin();
     // Checks are deferred to formatting time when the argument type is known.
     detail::dynamic_specs_handler<ParseContext> handler(specs_, ctx);
@@ -3683,20 +3720,33 @@ struct arg_join : detail::view {
 };
 
 template <typename It, typename Sentinel, typename Char>
-struct formatter<arg_join<It, Sentinel, Char>, Char>
-    : formatter<typename std::iterator_traits<It>::value_type, Char> {
+struct formatter<arg_join<It, Sentinel, Char>, Char> {
+ private:
+  using value_type = typename std::iterator_traits<It>::value_type;
+  using formatter_type =
+      conditional_t<has_formatter<value_type, format_context>::value,
+                    formatter<value_type, Char>,
+                    detail::fallback_formatter<value_type, Char>>;
+
+  formatter_type value_formatter_;
+
+ public:
+  template <typename ParseContext>
+  FMT_CONSTEXPR auto parse(ParseContext& ctx) -> decltype(ctx.begin()) {
+    return value_formatter_.parse(ctx);
+  }
+
   template <typename FormatContext>
   auto format(const arg_join<It, Sentinel, Char>& value, FormatContext& ctx)
       -> decltype(ctx.out()) {
-    using base = formatter<typename std::iterator_traits<It>::value_type, Char>;
     auto it = value.begin;
     auto out = ctx.out();
     if (it != value.end) {
-      out = base::format(*it++, ctx);
+      out = value_formatter_.format(*it++, ctx);
       while (it != value.end) {
         out = detail::copy_str<Char>(value.sep.begin(), value.sep.end(), out);
         ctx.advance_to(out);
-        out = base::format(*it++, ctx);
+        out = value_formatter_.format(*it++, ctx);
       }
     }
     return out;
@@ -3870,6 +3920,30 @@ FMT_DEPRECATED format_arg_store<buffer_context<Char>, Args...>
 make_format_to_n_args(const Args&... args) {
   return format_arg_store<buffer_context<Char>, Args...>(args...);
 }
+
+#if FMT_COMPILE_TIME_CHECKS
+template <typename... Args> struct format_string {
+  string_view str;
+
+  template <size_t N> consteval format_string(const char (&s)[N]) : str(s) {
+    if constexpr (detail::count_named_args<Args...>() == 0) {
+      using checker = detail::format_string_checker<char, detail::error_handler,
+                                                    remove_cvref_t<Args>...>;
+      detail::parse_format_string<true>(string_view(s, N), checker(s, {}));
+    }
+  }
+
+  template <typename T,
+            FMT_ENABLE_IF(std::is_constructible_v<string_view, const T&>)>
+  format_string(const T& s) : str(s) {}
+};
+
+template <typename... Args>
+FMT_INLINE std::string format(
+    format_string<std::type_identity_t<Args>...> format_str, Args&&... args) {
+  return detail::vformat(format_str.str, make_format_args(args...));
+}
+#endif
 
 template <typename Char, enable_if_t<(!std::is_same<Char, char>::value), int>>
 std::basic_string<Char> detail::vformat(

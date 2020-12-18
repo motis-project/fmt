@@ -8,11 +8,6 @@
 #ifndef FMT_OS_H_
 #define FMT_OS_H_
 
-#if defined(__MINGW32__) || defined(__CYGWIN__)
-// Workaround MinGW bug https://sourceforge.net/p/mingw/bugs/2024/.
-#  undef __STRICT_ANSI__
-#endif
-
 #include <cerrno>
 #include <clocale>  // for locale_t
 #include <cstddef>
@@ -280,7 +275,8 @@ class file {
     WRONLY = FMT_POSIX(O_WRONLY),  // Open for writing only.
     RDWR = FMT_POSIX(O_RDWR),      // Open for reading and writing.
     CREATE = FMT_POSIX(O_CREAT),   // Create if the file doesn't exist.
-    APPEND = FMT_POSIX(O_APPEND)   // Open in append mode.
+    APPEND = FMT_POSIX(O_APPEND),  // Open in append mode.
+    TRUNC = FMT_POSIX(O_TRUNC)     // Truncate the content of the file.
   };
 
   // Constructs a file object which doesn't represent any file.
@@ -357,7 +353,7 @@ struct buffer_size {
 };
 
 struct ostream_params {
-  int oflag = file::WRONLY | file::CREATE;
+  int oflag = file::WRONLY | file::CREATE | file::TRUNC;
   size_t buffer_size = BUFSIZ > 32768 ? BUFSIZ : 32768;
 
   ostream_params() {}
@@ -378,7 +374,7 @@ struct ostream_params {
 static constexpr detail::buffer_size buffer_size;
 
 // A fast output stream which is not thread-safe.
-class FMT_API ostream final : private detail::buffer<char> {
+class ostream final : private detail::buffer<char> {
  private:
   file file_;
 
@@ -388,7 +384,7 @@ class FMT_API ostream final : private detail::buffer<char> {
     clear();
   }
 
-  void grow(size_t) override final;
+  FMT_API void grow(size_t) override final;
 
   ostream(cstring_view path, const detail::ostream_params& params)
       : file_(path, params.oflag) {
