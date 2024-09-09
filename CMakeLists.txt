@@ -159,7 +159,7 @@ option(FMT_FUZZ "Generate the fuzz target." OFF)
 option(FMT_CUDA_TEST "Generate the cuda-test target." OFF)
 option(FMT_OS "Include OS-specific APIs." ON)
 option(FMT_MODULE "Build a module instead of a traditional library." OFF)
-option(FMT_SYSTEM_HEADERS "Expose headers with marking them as system." OFF)
+option(FMT_SYSTEM_HEADERS "Expose headers with marking them as system." ON)
 option(FMT_UNICODE "Enable Unicode support." ON)
 
 if (FMT_TEST AND FMT_MODULE)
