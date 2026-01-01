@@ -1,9 +1,18 @@
 module;
 
+#define FMT_MODULE
+
+#ifdef _MSVC_LANG
+#  define FMT_CPLUSPLUS _MSVC_LANG
+#else
+#  define FMT_CPLUSPLUS __cplusplus
+#endif
+
 // Put all implementation-provided headers into the global module fragment
 // to prevent attachment to this module.
 #ifndef FMT_IMPORT_STD
 #  include <algorithm>
+#  include <bitset>
 #  include <chrono>
 #  include <cmath>
 #  include <complex>
@@ -14,7 +23,9 @@ module;
 #  include <cstring>
 #  include <ctime>
 #  include <exception>
-#  include <expected>
+#  if FMT_CPLUSPLUS > 202002L
+#    include <expected>
+#  endif
 #  include <filesystem>
 #  include <fstream>
 #  include <functional>
@@ -39,6 +50,8 @@ module;
 #  include <limits.h>
 #  include <stdint.h>
 #  include <stdio.h>
+#  include <stdlib.h>
+#  include <string.h>
 #  include <time.h>
 #endif
 #include <cerrno>
@@ -79,6 +92,10 @@ module;
 #endif
 
 export module fmt;
+
+#ifdef FMT_IMPORT_STD
+import std;
+#endif
 
 #define FMT_EXPORT export
 #define FMT_BEGIN_EXPORT export {
@@ -122,9 +139,17 @@ extern "C++" {
 module :private;
 #endif
 
+#ifdef FMT_ATTACH_TO_GLOBAL_MODULE
+extern "C++" {
+#endif
+
 #if FMT_HAS_INCLUDE("format.cc")
 #  include "format.cc"
 #endif
 #if FMT_OS && FMT_HAS_INCLUDE("os.cc")
 #  include "os.cc"
+#endif
+
+#ifdef FMT_ATTACH_TO_GLOBAL_MODULE
+}
 #endif
